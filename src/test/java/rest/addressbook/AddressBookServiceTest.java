@@ -320,7 +320,7 @@ public class AddressBookServiceTest {
 				.request().delete();
 		assertEquals(404, response.getStatus());
 		
-		// Verify that the number of users hasn't changed testing idempotence
+		// Verify that the number of users hasn't changed proving idempotence
 		Response response3 = client.target("http://localhost:8282/contacts")
 				.request(MediaType.APPLICATION_JSON).get();
 		addressBookRetrieved = response3.readEntity(AddressBook.class);
