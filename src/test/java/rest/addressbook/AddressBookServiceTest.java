@@ -42,7 +42,13 @@ public class AddressBookServiceTest {
 		assertEquals(200, response.getStatus());
 		assertEquals(0, response.readEntity(AddressBook.class).getPersonList()
 				.size());
-
+		
+		// Request the address book again to test idempotence and safety
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request().get();
+		assertEquals(200, response2.getStatus());
+		assertEquals(0, response2.readEntity(AddressBook.class).getPersonList()
+				.size());
 		//////////////////////////////////////////////////////////////////////
 		// Verify that GET /contacts is well implemented by the service, i.e
 		// test that it is safe and idempotent
@@ -65,7 +71,6 @@ public class AddressBookServiceTest {
 		Response response = client.target("http://localhost:8282/contacts")
 				.request(MediaType.APPLICATION_JSON)
 				.post(Entity.entity(juan, MediaType.APPLICATION_JSON));
-
 		assertEquals(201, response.getStatus());
 		assertEquals(juanURI, response.getLocation());
 		assertEquals(MediaType.APPLICATION_JSON_TYPE, response.getMediaType());
@@ -73,6 +78,14 @@ public class AddressBookServiceTest {
 		assertEquals(juan.getName(), juanUpdated.getName());
 		assertEquals(1, juanUpdated.getId());
 		assertEquals(juanURI, juanUpdated.getHref());
+		
+		// Create the same user to test idempotence and safety
+		URI juanURI2 = URI.create("http://localhost:8282/contacts/person/2");
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON)
+				.post(Entity.entity(juan, MediaType.APPLICATION_JSON));
+		assertEquals(201,response2.getStatus());
+		assertEquals(juanURI2, response2.getLocation());
 
 		// Check that the new user exists
 		response = client.target("http://localhost:8282/contacts/person/1")
@@ -138,6 +151,14 @@ public class AddressBookServiceTest {
 		assertEquals(maria.getName(), mariaUpdated.getName());
 		assertEquals(3, mariaUpdated.getId());
 		assertEquals(mariaURI, mariaUpdated.getHref());
+		
+		// Check same user to test idempotence and safety
+		Response response2 = client.target("http://localhost:8282/contacts/person/3")
+				.request(MediaType.APPLICATION_JSON).get();
+		assertEquals(200, response2.getStatus());
+		Person checkUser = response2.readEntity(Person.class);
+		assertEquals(maria.getName(),checkUser.getName());
+		assertEquals(3,checkUser.getId());
 
 		//////////////////////////////////////////////////////////////////////
 		// Verify that GET /contacts/person/3 is well implemented by the service, i.e
@@ -170,6 +191,32 @@ public class AddressBookServiceTest {
 		assertEquals(2, addressBookRetrieved.getPersonList().size());
 		assertEquals(juan.getName(), addressBookRetrieved.getPersonList()
 				.get(1).getName());
+				
+		// Add new user to test idempotence and safety
+		Person claire = new Person();
+		claire.setName("Claire");
+		URI claireURI = URI.create("http://localhost:8282/contacts/person/1");
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON)
+				.post(Entity.entity(claire, MediaType.APPLICATION_JSON));
+		assertEquals(201, response2.getStatus());
+		Response response3 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON).get();
+		assertEquals(200, response3.getStatus());
+		addressBookRetrieved = response3
+				.readEntity(AddressBook.class);
+		assertEquals(3, addressBookRetrieved.getPersonList().size());
+		assertEquals(claire.getName(), addressBookRetrieved.getPersonList().get(2).getName());
+		assertEquals(claireURI, response2.getLocation());
+		
+		// Test post again with same user for idempotence
+		URI claireURI2 = URI.create("http://localhost:8282/contacts/person/2");
+		Response response4 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON)
+				.post(Entity.entity(claire, MediaType.APPLICATION_JSON));
+		assertEquals(201, response4.getStatus());
+		assertEquals(claireURI2, response4.getLocation());
+		
 
 		//////////////////////////////////////////////////////////////////////
 		// Verify that POST is well implemented by the service, i.e
@@ -223,6 +270,18 @@ public class AddressBookServiceTest {
 				.request(MediaType.APPLICATION_JSON)
 				.put(Entity.entity(maria, MediaType.APPLICATION_JSON));
 		assertEquals(400, response.getStatus());
+		
+		// Modify the user again to test idempotence
+		Response response2 = client
+				.target("http://localhost:8282/contacts/person/2")
+				.request(MediaType.APPLICATION_JSON)
+				.put(Entity.entity(maria, MediaType.APPLICATION_JSON));
+		assertEquals(200, response2.getStatus());
+		Person mariaUpdated = response2.readEntity(Person.class);
+		assertEquals(maria.getName(), mariaUpdated.getName());
+		assertEquals(2, mariaUpdated.getId());
+		assertEquals(juanURI, mariaUpdated.getHref());
+		
 
 		//////////////////////////////////////////////////////////////////////
 		// Verify that PUT /contacts/person/2 is well implemented by the service, i.e
@@ -251,11 +310,21 @@ public class AddressBookServiceTest {
 				.target("http://localhost:8282/contacts/person/2").request()
 				.delete();
 		assertEquals(204, response.getStatus());
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON).get();
+		AddressBook addressBookRetrieved = response2.readEntity(AddressBook.class);
+		assertEquals(1, addressBookRetrieved.getPersonList().size());
 
 		// Verify that the user has been deleted
 		response = client.target("http://localhost:8282/contacts/person/2")
 				.request().delete();
 		assertEquals(404, response.getStatus());
+		
+		// Verify that the number of users hasn't changed testing idempotence
+		Response response3 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON).get();
+		addressBookRetrieved = response3.readEntity(AddressBook.class);
+		assertEquals(1, addressBookRetrieved.getPersonList().size());
 
 		//////////////////////////////////////////////////////////////////////
 		// Verify that DELETE /contacts/person/2 is well implemented by the service, i.e
